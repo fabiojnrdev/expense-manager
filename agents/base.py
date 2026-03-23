@@ -81,4 +81,22 @@ class BaseAgent(ABC, Generic[InputT, OutputT]):
             self._last_duration_s = time.perf_counter() - start
             logger.error("[%s] failed after %.3fs: %s", self.name, self._last_duration_s, exc)
             raise
+        def validate(self) -> None:
+            """Validação prévia opcional. Chamada pelo orquestrador antes de 
+            `run()``. As subclasses podem gerar um erro ``ConfigurationError`` se detectarem
+            uma configuração inválida."""
+        @property
+        def last_duration_s(self) -> float:
+            """Segundos de tempo real consumidos pela chamada ``run()`` mais recente."""
+            return self._last_duration_s
         
+        @property
+        def run_count(self) -> int:
+            """Número total de runs executadas com sucesso"""
+            return self._run_count
+        
+        # Abstração
+        
+       """ @abstractmethod
+        def _execute(self,input_data: InputT) -> OutputT:
+          """  
