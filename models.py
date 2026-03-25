@@ -158,3 +158,82 @@ class CategorySummary:
             f"({self.percentage:.1f}%, {self.count} items)"
         )
  
+@dataclass
+class ExpenseReport:
+    """
+    Relatório completo processado pronto para renderização.
+ 
+    Atributos
+    ----------
+    summaries : list[CategorySummary]
+        Agregações por categoria, ordenadas pelo total em ordem decrescente.
+    grand_total : Money
+    expenses : list[Expense]
+        Todas as despesas individuais incluídas neste relatório.
+    generated_at : datetime
+    period_start : Optional[date]
+    period_end : Optional[date]
+    metrics : ReportMetrics
+    """
+    summaries: list[CategorySummary]
+    grand_total: Money
+    expenses: list[Expense]
+    generated_at: datetime = field(default_factory=datetime.now)
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+    metrics: Optional["ReportMetrics"] = None
+ 
+ 
+@dataclass(frozen=True)
+class ReportMetrics:
+    """
+    Métricas operacionais e analíticas capturadas durante a geração do relatório.
+ 
+    Elas são usadas para observabilidade, garantia de qualidade e feedback ao usuário.
+    Todos os valores de tempo estão em segundos.
+    """
+    # Qualidade dos dados de entrada
+    total_records_read: int
+    valid_records: int
+    invalid_records: int
+    duplicate_records: int
+ 
+    # Processamento
+    parse_duration_s: float
+    aggregation_duration_s: float
+    render_duration_s: float
+ 
+    # Insights dos dados
+    category_count: int
+    date_range_days: int
+    largest_single_expense: float
+    smallest_single_expense: float
+    std_deviation: float
+ 
+    @property
+    def total_duration_s(self) -> float:
+        return self.parse_duration_s + self.aggregation_duration_s + self.render_duration_s
+ 
+    @property
+    def data_quality_pct(self) -> float:
+        if self.total_records_read == 0:
+            return 0.0
+        return (self.valid_records / self.total_records_read) * 100
+ 
+    def summary_lines(self) -> list[str]:
+        """Retorna linhas de métricas legíveis para exibição em CLI."""
+        return [
+            f"  Registros lidos   : {self.total_records_read}",
+            f"  Válidos / Inválidos: {self.valid_records} / {self.invalid_records}",
+            f"  Duplicados ignorados: {self.duplicate_records}",
+            f"  Qualidade dos dados: {self.data_quality_pct:.1f}%",
+            f"  Categorias encontradas: {self.category_count}",
+            f"  Intervalo de datas: {self.date_range_days} dias",
+            f"  Maior despesa     : R$ {self.largest_single_expense:,.2f}",
+            f"  Menor despesa     : R$ {self.smallest_single_expense:,.2f}",
+            f"  Desvio padrão     : R$ {self.std_deviation:,.2f}",
+            f"  Tempo de parsing  : {self.parse_duration_s:.3f}s",
+            f"  Tempo de agregação: {self.aggregation_duration_s:.3f}s",
+            f"  Tempo de renderização: {self.render_duration_s:.3f}s",
+            f"  Tempo total       : {self.total_duration_s:.3f}s",
+        ]

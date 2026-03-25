@@ -97,6 +97,6 @@ class BaseAgent(ABC, Generic[InputT, OutputT]):
         
         # Abstração
         
-       """ @abstractmethod
-        def _execute(self,input_data: InputT) -> OutputT:
+    """ @abstractmethod
+       def _execute(self,input_data: InputT) -> OutputT:
           """  
