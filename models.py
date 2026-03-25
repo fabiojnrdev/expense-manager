@@ -83,3 +83,78 @@ class Category:
         object.__setattr__(self,"name", normalised)
         
     @property
+    def full_name(self) -> str:
+        return f"{self.parent}/{self.name}" if self.parent else self.name
+    def __str__(self) -> str:
+        return self.full_name
+    
+# Entidade principal
+class Expense:
+    """
+    Entidade principal do domínio que representa uma única despesa financeira.
+    Atributos
+    ---------
+    descrição: str
+    Descrição da despesa em texto livre.
+    valor: Money
+    Valor monetário.
+    categoria: Categor
+    Classificação da despesa.
+    data_da_despesa: dat
+    Data em que a despesa ocorreu (o padrão é hoje).
+    tags: list[str]
+    Tags opcionais de formato livre para pesquisa entre categorias.
+    origem: InputSourc
+    Origem deste registro.
+    """
+    description: str
+    amount: Money
+    category: Category
+    expense_date: date = field(default_factory=date.today)
+    tags: list[str] = field(default_factory=list)
+    source: InputSource = InputSource.TERMINA
+    
+    def __post_init__(self) -> None:
+        if not self.description.strip():
+            raise ValueError("A descrição da despesa não pode estar vazia.")
+    def to_dict(self) -> dict:
+        """Serializa para um dicionário simples (compatível com JSON)."""
+        return{
+             "description": self.description,
+            "amount": float(self.amount.amount),
+            "currency": self.amount.currency,
+            "category": self.category.name,
+            "parent_category": self.category.parent,
+            "date": self.expense_date.isoformat(),
+            "tags": self.tags,
+            "source": self.source.name,
+        }
+# Modelos de resultados agregados
+
+@dataclass(frozen=True)
+class CategorySummary:
+    """
+    Estatísticas agregadas para uma categoria.
+    Atributos
+    ---------
+    nome_da_categoria: str
+    total: Mone
+    contagem: int
+    Número de despesas individuais nesta categoria.
+    percentual: float
+    Fração do total geral (0-100).
+    média: Mone
+    Valor médio da despesa para esta categoria.
+    """
+    category_name: str
+    total: Money
+    count: int
+    percentage: float
+    average: Money
+ 
+    def __str__(self) -> str:
+        return (
+            f"{self.category_name}: {self.total} "
+            f"({self.percentage:.1f}%, {self.count} items)"
+        )
+ 
