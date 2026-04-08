@@ -23,6 +23,7 @@ class ReportFormat(Enum):
     JSON = "json"
  
 # Objetos de valor(imutáveis)
+@dataclass(frozen=True)
 class Money:
     """Valor monetário com reconhecimento de moeda.
     Armazena internamente o valor como Decimal para evitar erros de arredondamento de ponto flutuante
@@ -50,7 +51,7 @@ class Money:
     def __str__(self) -> str:
         symbols = {"BRL": "R$", "USD": "US$", "EUR": "€"}
         symbol = symbols.get(self.currency, self.currency)
-        return f"{symbol} {self.amount:2f}"
+        return f"{symbol} {self.amount:.2f}"
     
     @classmethod
     def from_string(cls, raw: str, currency: str = "BRL") -> "Money":
@@ -64,7 +65,7 @@ class Money:
         try:
             return cls(Decimal(cleaned), currency)
         except InvalidOperation:
-            raise ValueError(f"Não foi possível interpretar '{raw}' como um valor monetário.")
+            raise ValueError(f"Cannot parse '{raw}' as a monetary amount.")
 @dataclass(frozen=True)
 class Category:
     """Categoria de despesa com categoria pai opcional para agrupamento hierárquico.
@@ -89,6 +90,7 @@ class Category:
         return self.full_name
     
 # Entidade principal
+@dataclass(frozen=True)
 class Expense:
     """
     Entidade principal do domínio que representa uma única despesa financeira.
@@ -112,14 +114,14 @@ class Expense:
     category: Category
     expense_date: date = field(default_factory=date.today)
     tags: list[str] = field(default_factory=list)
-    source: InputSource = InputSource.TERMINA
+    source: InputSource = InputSource.TERMINAL
     
     def __post_init__(self) -> None:
         if not self.description.strip():
             raise ValueError("A descrição da despesa não pode estar vazia.")
     def to_dict(self) -> dict:
         """Serializa para um dicionário simples (compatível com JSON)."""
-        return{
+        return {
              "description": self.description,
             "amount": float(self.amount.amount),
             "currency": self.amount.currency,

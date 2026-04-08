@@ -1,35 +1,35 @@
 """
 agents/base.py
 ==============
-Classe base abstrata para todos os subagentes do pipeline.
+Abstract base class for all pipeline subagents.
 
-Arquitetura
------------
-Cada etapa de processamento é encapsulada em sua própria classe Agent. Os agentes
-são componentes de responsabilidade única que recebem entradas tipadas e retornam
-saídas tipadas. O orquestrador (``agents/orchestrator.py``) conecta esses agentes,
-chamando ``validate()`` antes de ``run()`` em cada um.
+Architecture
+------------
+Each processing step is encapsulated in its own Agent class.  Agents are
+single-responsibility workers that receive typed inputs and return typed
+outputs.  The orchestrator (``agents/orchestrator.py``) wires them together,
+calling ``validate()`` before ``run()`` on each agent.
 
-Ciclo de vida do agente
-----------------------
-  1. Instanciação  — injeta configuração opcional via ``__init__``
-  2. ``validate()`` — verificações pré-execução; retorna um ``ValidationResult``
-                      (lança ``ConfigurationError`` via ``raise_if_error()``)
-  3. ``run(input)`` — ponto de entrada público; envolve ``_execute()`` com timing,
-                      logging estruturado e normalização de erros
-  4. ``_execute()`` — subclasses implementam APENAS este método
-  5. Propriedades   — ``last_duration_s``, ``run_count``, ``last_error``
+Agent lifecycle
+---------------
+  1. Instantiation  — inject optional configuration via ``__init__``
+  2. ``validate()`` — pre-flight checks; returns a ``ValidationResult``
+                      (raises ``ConfigurationError`` via ``raise_if_error()``)
+  3. ``run(input)`` — public entry point; wraps ``_execute()`` with timing,
+                      structured logging and error normalisation
+  4. ``_execute()`` — subclasses implement ONLY this method
+  5. Properties     — ``last_duration_s``, ``run_count``, ``last_error``
 
-Justificativa de design
-----------------------
-- Uma única implementação de ``run()`` na classe base garante que todos os agentes tenham
-  o mesmo comportamento de timing, logging e tratamento de exceções, sem duplicação.
-- ``validate()`` retorna um ``ValidationResult`` (não None) para que o orquestrador
-  possa inspecionar avisos sem precisar capturar exceções.
-- Generic[InputT, OutputT] permite orquestração com tipagem segura sem perder
-  flexibilidade: cada agente define seu próprio contrato via parâmetros de tipo.
-- ``MockAgent`` no final deste módulo torna o teste do orquestrador simples,
-  sem precisar instanciar agentes reais.
+Design rationale
+----------------
+- A single ``run()`` implementation in the base class ensures every agent gets
+  identical timing, logging and exception handling — no duplication.
+- ``validate()`` returns a ``ValidationResult`` (not None) so the orchestrator
+  can inspect warnings without catching exceptions.
+- Generic[InputT, OutputT] gives type-safe orchestration without sacrificing
+  flexibility: each agent declares its own contract via the type parameters.
+- ``MockAgent`` at the bottom of this module makes unit-testing the orchestrator
+  trivial without instantiating real agents.
 """
 
 from __future__ import annotations
@@ -50,7 +50,7 @@ OutputT = TypeVar("OutputT")
 
 
 # ---------------------------------------------------------------------------
-# Resultado de validação — retornado por validate() para inspeção
+# Validation result — returned by validate() so callers can inspect results
 # ---------------------------------------------------------------------------
 
 class ValidationStatus(Enum):
@@ -62,13 +62,13 @@ class ValidationStatus(Enum):
 @dataclass
 class ValidationResult:
     """
-    Resultado estruturado de ``BaseAgent.validate()``.
+    Structured result of ``BaseAgent.validate()``.
 
-    Atributos
+    Attributes
     ----------
     status : ValidationStatus
     messages : list[str]
-        Mensagens legíveis contendo avisos, erros ou observações.
+        Human-readable notes, warnings or error descriptions.
     """
     status: ValidationStatus = ValidationStatus.OK
     messages: list[str] = field(default_factory=list)
@@ -87,7 +87,7 @@ class ValidationResult:
         return self.status != ValidationStatus.ERROR
 
     def raise_if_error(self) -> None:
-        """Lança ``ConfigurationError`` se a validação falhar."""
+        """Raise ``ConfigurationError`` if validation did not pass."""
         if not self.is_ok:
             detail = "; ".join(self.messages)
             raise ConfigurationError(detail)
@@ -99,17 +99,17 @@ class ValidationResult:
 
 class BaseAgent(ABC, Generic[InputT, OutputT]):
     """
-    Classe base abstrata para todos os agentes do pipeline.
+    Abstract base for all pipeline agents.
 
-    Subclasses DEVEM:
-      - Definir o atributo de classe ``name`` com um identificador legível.
-      - Implementar ``_execute(input_data)`` com a lógica principal.
+    Subclasses MUST:
+      - Set the class-level ``name`` attribute to a human-readable identifier.
+      - Implement ``_execute(input_data)`` with their core logic.
 
-    Subclasses PODEM:
-      - Sobrescrever ``validate()`` para verificações pré-execução.
-      - Sobrescrever ``__init__`` para aceitar configuração, chamando ``super().__init__()``.
+    Subclasses MAY:
+      - Override ``validate()`` to perform pre-flight checks.
+      - Override ``__init__`` to accept configuration, calling ``super().__init__()``.
 
-    Uso
+    Usage
     -----
     >>> class MyAgent(BaseAgent[MyInput, MyOutput]):
     ...     name = "MyAgent"
@@ -117,7 +117,7 @@ class BaseAgent(ABC, Generic[InputT, OutputT]):
     ...         return MyOutput(value=inp.value * 2)
     """
 
-    #: Sobrescrever em toda subclasse — usado em logs e mensagens de erro.
+    #: Override in every subclass — used in logs and error messages.
     name: str = "UnnamedAgent"
 
     def __init__(self) -> None:
@@ -126,47 +126,47 @@ class BaseAgent(ABC, Generic[InputT, OutputT]):
         self._last_error: Optional[Exception] = None
 
     # ------------------------------------------------------------------
-    # Interface pública — chamada pelo orquestrador
+    # Public interface — called by the orchestrator
     # ------------------------------------------------------------------
 
     def validate(self) -> ValidationResult:
         """
-        Hook de validação pré-execução.
+        Pre-flight validation hook.
 
-        Retorna ``ValidationStatus.OK`` por padrão. Subclasses podem sobrescrever
-        para validar arquivos, configurações, etc.
+        Returns ``ValidationStatus.OK`` by default.  Subclasses override this
+        to check that required files exist, config values are in range, etc.
 
         Returns
         -------
         ValidationResult
-            Use ``result.raise_if_error()`` para transformar erros em exceções.
+            Call ``result.raise_if_error()`` to convert errors into exceptions.
         """
         return ValidationResult(status=ValidationStatus.OK)
 
     def run(self, input_data: InputT) -> OutputT:
         """
-        Executa o agente.
+        Execute the agent.
 
-        Envolve ``_execute()`` com:
-          - Logging estruturado em nível INFO no início e fim
-          - Medição de tempo com ``time.perf_counter()``
-          - Incremento de ``run_count`` a cada execução bem-sucedida
-          - Em caso de erro: log em nível ERROR, armazena exceção e relança
+        Wraps ``_execute()`` with:
+          - Structured logging at INFO level on start and completion
+          - Wall-clock timing via ``time.perf_counter()``
+          - ``run_count`` incremented on every successful execution
+          - On failure: logs at ERROR, stores exception, re-raises unchanged
 
         Parameters
         ----------
         input_data : InputT
-            Dados de entrada específicos do agente.
+            Agent-specific input payload.
 
         Returns
         -------
         OutputT
-            Saída específica do agente.
+            Agent-specific output payload.
 
         Raises
         ------
         Exception
-            Qualquer exceção em ``_execute()`` é relançada após logging.
+            Any exception raised inside ``_execute()`` is propagated after logging.
         """
         logger.info("[%s] starting (run #%d)", self.name, self._run_count + 1)
         start = time.perf_counter()
@@ -190,44 +190,44 @@ class BaseAgent(ABC, Generic[InputT, OutputT]):
             raise
 
     # ------------------------------------------------------------------
-    # Propriedades de introspecção
+    # Introspection properties
     # ------------------------------------------------------------------
 
     @property
     def last_duration_s(self) -> float:
-        """Tempo em segundos da última execução de ``run()``."""
+        """Wall-clock seconds consumed by the most recent ``run()`` call."""
         return self._last_duration_s
 
     @property
     def run_count(self) -> int:
-        """Quantidade de execuções bem-sucedidas de ``run()``."""
+        """Number of *successful* ``run()`` invocations on this instance."""
         return self._run_count
 
     @property
     def last_error(self) -> Optional[Exception]:
-        """Exceção da última falha, ou ``None``."""
+        """The exception from the last failed ``run()``, or ``None``."""
         return self._last_error
 
     @property
     def has_run(self) -> bool:
-        """``True`` se ``run()`` foi executado com sucesso ao menos uma vez."""
+        """``True`` if ``run()`` has been called at least once successfully."""
         return self._run_count > 0
 
     # ------------------------------------------------------------------
-    # Abstrato — subclasses implementam APENAS isso
+    # Abstract — subclasses implement ONLY this
     # ------------------------------------------------------------------
 
     @abstractmethod
     def _execute(self, input_data: InputT) -> OutputT:
         """
-        Lógica principal do agente.
+        Core agent logic.
 
-        Chamado exclusivamente por ``run()``. Timing, logging e tratamento
-        de erros já são gerenciados pela classe base.
+        Called exclusively by ``run()``.  Timing, logging and error wrapping
+        are handled by the base class — do not duplicate them here.
         """
 
     # ------------------------------------------------------------------
-    # Métodos especiais
+    # Dunder helpers
     # ------------------------------------------------------------------
 
     def __repr__(self) -> str:
@@ -238,18 +238,18 @@ class BaseAgent(ABC, Generic[InputT, OutputT]):
 
 
 # ---------------------------------------------------------------------------
-# MockAgent — usado para testes sem efeitos colaterais reais
+# MockAgent — for testing the orchestrator without real side effects
 # ---------------------------------------------------------------------------
 
 class MockAgent(BaseAgent[InputT, OutputT]):
     """
-    Dublê de teste para ``BaseAgent``.
+    Test double for ``BaseAgent``.
 
-    Aceita um valor fixo de retorno ou um erro simulado na construção.
-    Permite testar o ciclo completo ``validate() → run() → _execute()``
-    sem depender de I/O real.
+    Accepts a fixed return value or a callable at construction time.
+    Validates the full ``validate() → run() → _execute()`` lifecycle through
+    the base-class machinery without any real I/O.
 
-    Exemplos
+    Examples
     --------
     >>> agent = MockAgent(name="TestAgent", return_value=42)
     >>> agent.run("any input")
@@ -260,7 +260,7 @@ class MockAgent(BaseAgent[InputT, OutputT]):
     "<MockAgent name='TestAgent' runs=1 last=0.000s>"
 
     >>> failing = MockAgent(name="Failing", side_effect=ValueError("boom"))
-    >>> failing.run("x")   # levanta ValueError, last_error é preenchido
+    >>> failing.run("x")   # raises ValueError, last_error is set
     """
 
     def __init__(
@@ -275,7 +275,7 @@ class MockAgent(BaseAgent[InputT, OutputT]):
         self._return_value = return_value
         self._side_effect = side_effect
         self._validation_result = validation_result or ValidationResult()
-        #: Todos os inputs recebidos em chamadas de ``run()`` — útil em testes.
+        #: All inputs received across every ``run()`` call — inspect in tests.
         self.received_inputs: list[InputT] = []
 
     def validate(self) -> ValidationResult:
