@@ -45,13 +45,13 @@ class Money:
     def __add__(self, other):
         if self.currency != other.currency:
             raise ValueError(
-                f"Não é possível adicionar {self.currency} e {other.currency}"
+                f"Cannot add {self.currency} and {other.currency}"
             )
         return Money(self.amount + other.amount, self.currency)
     def __str__(self) -> str:
         symbols = {"BRL": "R$", "USD": "US$", "EUR": "€"}
         symbol = symbols.get(self.currency, self.currency)
-        return f"{symbol} {self.amount:.2f}"
+        return f"{symbol} {self.amount:,.2f}"
     
     @classmethod
     def from_string(cls, raw: str, currency: str = "BRL") -> "Money":

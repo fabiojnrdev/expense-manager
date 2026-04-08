@@ -88,7 +88,7 @@ class ChartAgent(BaseAgent[ExpenseReport, Path]):
         summaries = report.summaries
 
         if not summaries:
-            raise ValueError("Não é possível renderizar o gráfico: não há dados de categorias")
+            raise ValueError("no category summaries")
 
         labels = [s.category_name for s in summaries]
         sizes  = [float(s.total.amount) for s in summaries]
