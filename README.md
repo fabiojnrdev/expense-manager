@@ -1,4 +1,4 @@
-# Expense Tracker
+# Expense Manager
 
 [![tests](https://github.com/fabiojnrdev/expense-manager/actions/workflows/tests.yml/badge.svg)](https://github.com/fabiojnrdev/expense-tracker/actions/workflows/tests.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
